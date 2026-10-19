@@ -729,7 +729,7 @@ function showAuth(mode = "signup") {
           <label class="auth-label" for="auth-name">Your name</label>
           <input class="field" id="auth-name" maxlength="24" autocomplete="given-name" placeholder="What your classmates see">` : ""}
         <label class="auth-label" for="auth-user">Username</label>
-        <input class="field" id="auth-user" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="e.g. leon_m">
+        <input class="field" id="auth-user" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="e.g. alex_k">
         <label class="auth-label" for="auth-pass">Password</label>
         <input class="field" id="auth-pass" type="password" autocomplete="${signup ? "new-password" : "current-password"}" placeholder="${signup ? "At least 6 characters" : ""}">
         ${signup && s.codeRequired ? `
