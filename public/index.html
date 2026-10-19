@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#121212">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="Add your songs to the class queue.">
+  <title>Class Queue</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app">
+    <main id="views">
+      <!-- HOME -->
+      <section class="view" id="view-home" data-view="home">
+        <div class="home-glow" id="home-glow"></div>
+        <header class="topbar">
+          <button class="avatar" id="avatar-btn" aria-label="Your profile"></button>
+          <div class="chips">
+            <span class="chip live" id="live-chip"><span class="dot"></span><span id="online-count">0</span> here</span>
+            <span class="chip host-chip" id="host-chip" hidden>Host</span>
+          </div>
+        </header>
+        <h1 class="greeting" id="greeting">Hello</h1>
+
+        <div id="locked-banner" class="banner" hidden>Requests are paused by the host right now.</div>
+
+        <div id="now-card"></div>
+
+        <div class="section-head">
+          <h2>Up next</h2>
+          <button class="link" data-goto="queue">Show all</button>
+        </div>
+        <div id="home-upnext" class="tracklist"></div>
+
+        <div class="section-head">
+          <h2>Trending right now</h2>
+          <button class="link" data-goto="search">Search</button>
+        </div>
+        <div id="trending" class="shelf"></div>
+
+        <div class="section-head" id="history-head" hidden><h2>Recently played</h2></div>
+        <div id="home-history" class="shelf"></div>
+      </section>
+
+      <!-- SEARCH -->
+      <section class="view" id="view-search" data-view="search" hidden>
+        <header class="page-head">
+          <h1>Search</h1>
+        </header>
+        <form class="searchbar" id="search-form" role="search" autocomplete="off">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 0 1 5.9 12.1l4.8 4.8-1.4 1.4-4.8-4.8A7.5 7.5 0 1 1 10.5 3zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z"/></svg>
+          <input id="search-input" type="search" inputmode="search" enterkeyhint="search" placeholder="What do you want to hear?" aria-label="Search songs or artists">
+          <button type="button" id="search-clear" class="icon-btn" aria-label="Clear search" hidden>
+            <svg viewBox="0 0 24 24"><path d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6 10.6 12 5 6.4z"/></svg>
+          </button>
+        </form>
+        <div id="search-body"></div>
+      </section>
+
+      <!-- QUEUE -->
+      <section class="view" id="view-queue" data-view="queue" hidden>
+        <header class="page-head">
+          <h1>Queue</h1>
+          <button class="icon-btn" id="export-btn" aria-label="Copy song list" title="Copy song list">
+            <svg viewBox="0 0 24 24"><path d="M8 3h11a2 2 0 0 1 2 2v11h-2V5H8zM5 7h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h10V9z"/></svg>
+          </button>
+        </header>
+        <p class="queue-meta" id="queue-meta"></p>
+        <div class="filter-row">
+          <button class="pill active" data-filter="all">All</button>
+          <button class="pill" data-filter="mine">Added by you</button>
+          <button class="pill" data-filter="liked">Liked</button>
+        </div>
+        <div id="host-bar" class="host-bar" hidden>
+          <button class="btn-green" id="next-btn">
+            <svg viewBox="0 0 24 24"><path d="M6 5.5v13l9-6.5zM16 5h2.5v14H16z"/></svg>
+            Next song
+          </button>
+          <span class="host-hint">Host controls are on</span>
+        </div>
+        <div id="queue-now"></div>
+        <h2 class="list-title" id="queue-title">Next up</h2>
+        <div id="queue-list" class="tracklist numbered"></div>
+        <details class="history" id="queue-history-wrap">
+          <summary>Recently played</summary>
+          <div id="queue-history" class="tracklist"></div>
+        </details>
+      </section>
+    </main>
+
+    <!-- Preview player -->
+    <div class="mini" id="mini" hidden>
+      <div class="mini-inner">
+        <img id="mini-art" alt="">
+        <div class="mini-text">
+          <div class="mini-title" id="mini-title"></div>
+          <div class="mini-sub" id="mini-sub"></div>
+        </div>
+        <button class="icon-btn mini-add" id="mini-add" aria-label="Add to queue"></button>
+        <button class="icon-btn mini-play" id="mini-play" aria-label="Pause"></button>
+      </div>
+      <div class="mini-progress"><div id="mini-bar"></div></div>
+    </div>
+
+    <nav class="tabbar" aria-label="Main">
+      <button class="tab active" data-goto="home">
+        <svg viewBox="0 0 24 24" class="off"><path d="M12 3 3 10v11h6v-6h6v6h6V10zm0 2.5 7 5.4V19h-2v-6H7v6H5v-8.1z"/></svg>
+        <svg viewBox="0 0 24 24" class="on"><path d="M12 3 3 10v11h6v-6h6v6h6V10z"/></svg>
+        <span>Home</span>
+      </button>
+      <button class="tab" data-goto="search">
+        <svg viewBox="0 0 24 24" class="off"><path d="M10.5 3a7.5 7.5 0 0 1 5.9 12.1l4.8 4.8-1.4 1.4-4.8-4.8A7.5 7.5 0 1 1 10.5 3zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z"/></svg>
+        <svg viewBox="0 0 24 24" class="on"><path d="M10.5 2a8.5 8.5 0 0 1 6.8 13.6l4.4 4.4-2.1 2.1-4.4-4.4A8.5 8.5 0 1 1 10.5 2zm0 3.2a5.3 5.3 0 1 0 0 10.6 5.3 5.3 0 0 0 0-10.6z"/></svg>
+        <span>Search</span>
+      </button>
+      <button class="tab" data-goto="queue">
+        <span class="badge" id="queue-badge" hidden></span>
+        <svg viewBox="0 0 24 24" class="off"><path d="M3 5h14v2H3zm0 6h14v2H3zm0 6h8v2H3zm16-4v-8h2v11a3 3 0 1 1-2-2.8z"/></svg>
+        <svg viewBox="0 0 24 24" class="on"><path d="M3 4h14v3H3zm0 6h14v3H3zm0 6h8v3H3zm15-3V4h3v13a3.5 3.5 0 1 1-3-3.5z"/></svg>
+        <span>Queue</span>
+      </button>
+    </nav>
+
+    <!-- Bottom sheet (song menu, profile, host settings) -->
+    <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+    <div class="sheet" id="sheet" role="dialog" aria-modal="true" hidden>
+      <div class="sheet-handle"></div>
+      <div id="sheet-body"></div>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <audio id="audio" preload="none"></audio>
+  </div>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

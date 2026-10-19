@@ -1,0 +1,21 @@
+{
+  "name": "setlist-builder",
+  "version": "1.0.0",
+  "description": "Shared class song queue, Spotify-style, on Cloudflare Workers",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Techfox2/setlist-builder.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Techfox2/setlist-builder/issues"
+  },
+  "homepage": "https://github.com/Techfox2/setlist-builder#readme",
+  "devDependencies": {
+    "wrangler": "^4.151.1"
+  },
+  "private": true
+}
