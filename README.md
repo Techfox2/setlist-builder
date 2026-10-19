@@ -2,7 +2,7 @@
 
 A Spotify-style web app for phones. Classmates open the link, search any song and add it to one shared queue. The host (you) plays songs from that queue on Spotify.
 
-- **Song catalog:** Apple's free iTunes Search API. It needs no key, covers basically everything on Spotify, and comes with cover art and 30-second previews.
+- **Song catalog:** Apple's free iTunes Search API, with Deezer's free API as a backup when Apple refuses requests from Cloudflare. Neither needs a key, both cover basically everything on Spotify, with cover art and 30-second previews.
 - **Hosting:** one Cloudflare Worker. The free plan is enough. The shared queue lives in a Durable Object, and phones stay updated live over a WebSocket.
 
 ## Features

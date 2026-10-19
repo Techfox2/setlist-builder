@@ -454,7 +454,13 @@ async function runSearch(q) {
   renderSearchResults();
   try {
     const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      // Got a web page instead of search results: the Worker isn't running behind this site.
+      throw new Error(`The search server isn't responding (HTTP ${res.status}). Make sure the site was deployed with "npm run deploy".`);
+    }
     if (!res.ok) throw new Error(data.error || "Search failed");
     if (ctrl.signal.aborted) return;
     search.results = data.results;
@@ -691,7 +697,7 @@ function openSongSheet(item) {
   if (s.preview) html += action("preview", preview.track?.trackId === s.trackId && !audio.paused ? "Pause preview" : "Play 30s preview", preview.track?.trackId === s.trackId && !audio.paused ? I.pause : I.play, "", k);
   if (status === "queued" || status === "playing") html += action("like", liked ? "Remove like" : "Like (vote it up)", liked ? I.heartFill : I.heart, liked ? "green" : "", k);
   html += `<a class="action" href="${esc(spotifyUrl(s))}" target="_blank" rel="noopener">${I.out}<span>Open in Spotify</span></a>`;
-  if (s.url) html += `<a class="action" href="${esc(s.url)}" target="_blank" rel="noopener">${I.out}<span>Open in Apple Music</span></a>`;
+  if (s.url) html += `<a class="action" href="${esc(s.url)}" target="_blank" rel="noopener">${I.out}<span>Open in ${String(s.trackId).startsWith("dz") ? "Deezer" : "Apple Music"}</span></a>`;
 
   if (isHost() && isSong) {
     html += `<div class="group-title">Host</div>`;

@@ -23,7 +23,9 @@
     "MAX_PER_PERSON": "5",
     // Music catalog. Leave as-is in production; only changed for local testing.
     "ITUNES_BASE": "https://itunes.apple.com",
-    "CHARTS_BASE": "https://rss.marketingtools.apple.com"
+    "CHARTS_BASE": "https://rss.marketingtools.apple.com",
+    // Fallback catalog when Apple refuses requests from Cloudflare.
+    "DEEZER_BASE": "https://api.deezer.com"
   }
   // The dashboard password is a secret, not a var:  npx wrangler secret put ADMIN_PASSWORD
 }

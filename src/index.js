@@ -113,38 +113,84 @@ async function route(request, env, ctx, url) {
 }
 
 // ---------------------------------------------------------------------------
-// Music catalog: Apple's free iTunes Search API (no key needed). It has
-// basically every song on Spotify, with cover art and 30-second previews.
+// Music catalog. Apple's free iTunes Search API is tried first (no key, huge
+// catalog, cover art and 30-second previews). Apple often rate-limits or blocks
+// requests coming from Cloudflare's servers, so Deezer's free API (also no key)
+// is the fallback. Deezer track IDs are stored with a "dz" prefix.
 // ---------------------------------------------------------------------------
+
+async function firstWorking(sources) {
+  const failures = [];
+  for (const [name, run] of sources) {
+    try {
+      const results = await run();
+      if (results.length) return { results, source: name };
+    } catch (err) {
+      console.warn(`${name} failed: ${err.message}`);
+      failures.push(`${name}: ${err.message}`);
+    }
+  }
+  if (failures.length === sources.length) {
+    throw new HttpError(502, `Couldn't reach the music catalog (${failures.join(", ")}). Try again in a moment.`);
+  }
+  return { results: [] };
+}
 
 async function search(q, request, env, ctx) {
   q = String(q || "").trim().slice(0, 100);
   if (!q) return { results: [] };
   const country = countryOf(request);
-  const api = `${env.ITUNES_BASE}/search?media=music&entity=song&limit=30&country=${country}&term=${encodeURIComponent(q)}`;
-  const data = await cachedJson(api, 3600, ctx);
-  return { results: (data.results || []).filter((r) => r.kind === "song").map(normalize) };
+  return firstWorking([
+    ["Apple", async () => {
+      const data = await cachedJson(`${env.ITUNES_BASE}/search?media=music&entity=song&limit=30&country=${country}&term=${encodeURIComponent(q)}`, 3600, ctx);
+      return (data.results || []).filter((r) => r.kind === "song").map(normalize);
+    }],
+    ["Deezer", async () => {
+      const data = await cachedJson(`${env.DEEZER_BASE}/search?limit=30&q=${encodeURIComponent(q)}`, 3600, ctx);
+      return (data.data || []).filter((t) => t.type === "track" || t.id).map(normalizeDeezer);
+    }],
+  ]);
 }
 
 async function topCharts(request, env, ctx) {
   const country = countryOf(request);
-  const feed = await cachedJson(`${env.CHARTS_BASE}/api/v2/${country}/music/most-played/50/songs.json`, 21600, ctx).catch(() => null);
-  const ids = (feed?.feed?.results || []).map((r) => r.id).filter(Boolean);
-  if (!ids.length) return { results: [] };
-  // The chart feed has no previews, so look the tracks up in one batch call.
-  const data = await cachedJson(`${env.ITUNES_BASE}/lookup?country=${country}&id=${ids.join(",")}`, 21600, ctx);
-  const byId = new Map((data.results || []).filter((r) => r.kind === "song").map((r) => [String(r.trackId), normalize(r)]));
-  return { results: ids.map((id) => byId.get(String(id))).filter(Boolean) };
+  return firstWorking([
+    ["Apple", async () => {
+      const feed = await cachedJson(`${env.CHARTS_BASE}/api/v2/${country}/music/most-played/50/songs.json`, 21600, ctx);
+      const ids = (feed?.feed?.results || []).map((r) => r.id).filter(Boolean);
+      if (!ids.length) return [];
+      // The chart feed has no previews, so look the tracks up in one batch call.
+      const data = await cachedJson(`${env.ITUNES_BASE}/lookup?country=${country}&id=${ids.join(",")}`, 21600, ctx);
+      const byId = new Map((data.results || []).filter((r) => r.kind === "song").map((r) => [String(r.trackId), normalize(r)]));
+      return ids.map((id) => byId.get(String(id))).filter(Boolean);
+    }],
+    ["Deezer", async () => {
+      const data = await cachedJson(`${env.DEEZER_BASE}/chart/0/tracks?limit=50`, 21600, ctx);
+      return (data.data || []).map(normalizeDeezer);
+    }],
+  ]).catch(() => ({ results: [] }));
 }
 
 async function lookupTrack(trackId, request, env, ctx) {
   trackId = String(trackId || "");
-  if (!/^\d{1,15}$/.test(trackId)) throw new HttpError(400, "Pick a song from the search results");
+  const m = trackId.match(/^(dz)?(\d{1,15})$/);
+  if (!m) throw new HttpError(400, "Pick a song from the search results");
   // Always fetch the song ourselves so nobody can inject fake titles.
-  const data = await cachedJson(`${env.ITUNES_BASE}/lookup?country=${countryOf(request)}&id=${trackId}`, 86400, ctx);
-  const hit = (data.results || []).find((r) => r.kind === "song");
+  let hit;
+  try {
+    if (m[1]) {
+      const t = await cachedJson(`${env.DEEZER_BASE}/track/${m[2]}`, 86400, ctx);
+      hit = t.id ? normalizeDeezer(t) : null;
+    } else {
+      const data = await cachedJson(`${env.ITUNES_BASE}/lookup?country=${countryOf(request)}&id=${m[2]}`, 86400, ctx);
+      const r = (data.results || []).find((x) => x.kind === "song");
+      hit = r ? normalize(r) : null;
+    }
+  } catch (err) {
+    throw new HttpError(502, `Couldn't reach the music catalog (${err.message}). Try again in a moment.`);
+  }
   if (!hit) throw new HttpError(404, "Couldn't find that song anymore");
-  return normalize(hit);
+  return hit;
 }
 
 function normalize(r) {
@@ -161,16 +207,41 @@ function normalize(r) {
   };
 }
 
+function normalizeDeezer(t) {
+  return {
+    trackId: `dz${t.id}`,
+    title: t.title || "Unknown",
+    artist: t.artist?.name || "Unknown",
+    album: t.album?.title || "",
+    artwork: t.album?.cover_medium || t.album?.cover || "",
+    preview: t.preview || "",
+    durationMs: (t.duration || 0) * 1000,
+    explicit: Boolean(t.explicit_lyrics),
+    url: t.link || "",
+  };
+}
+
 async function cachedJson(apiUrl, ttl, ctx) {
   const cache = caches.default;
   const key = new Request(apiUrl);
   const hit = await cache.match(key);
   if (hit) return hit.json();
-  const res = await fetch(apiUrl, { headers: { "User-Agent": "setlist-builder" } });
-  if (!res.ok) throw new HttpError(502, "The music catalog is busy. Try again in a moment.");
+  const res = await fetch(apiUrl, {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; setlist-builder/1.0)", Accept: "application/json" },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("bad response");
+  }
+  // Deezer reports errors (like its rate limit) inside a 200 response.
+  if (data?.error) throw new Error(data.error.message || "error");
   ctx.waitUntil(cache.put(key, new Response(text, { headers: { "Content-Type": "application/json", "Cache-Control": `max-age=${ttl}` } })));
-  return JSON.parse(text);
+  return data;
 }
 
 function countryOf(request) {
