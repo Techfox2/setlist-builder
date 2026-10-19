@@ -44,24 +44,24 @@ const I = {
 
 // ---------- Identity ----------
 
-function randomHex(bytes) {
-  const a = new Uint8Array(bytes);
-  crypto.getRandomValues(a);
-  return [...a].map((b) => b.toString(16).padStart(2, "0")).join("");
+// Signed-in member (from /api/me) and, if unlocked, the dashboard password for host mode.
+const me = { token: store.get("token", ""), id: "", name: "", username: "", adminPw: store.get("adminPw", "") };
+
+function setUser(user, token) {
+  if (token) {
+    me.token = token;
+    store.set("token", token);
+  }
+  me.id = user.id;
+  me.name = user.name;
+  me.username = user.username;
+  store.set("hadAccount", true);
 }
 
-const clientKey = store.get("clientKey") || randomHex(16);
-store.set("clientKey", clientKey);
-
-const me = { name: store.get("name", ""), pin: store.get("hostPin", ""), id: "" };
-
-async function computeMyId() {
-  try {
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(clientKey));
-    me.id = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
-  } catch {
-    me.id = ""; // Not a secure context (plain http on a LAN): "mine" filters won't work, adding still does.
-  }
+function signOut() {
+  me.token = me.id = me.name = me.username = "";
+  store.set("token", "");
+  showAuth("login");
 }
 
 // ---------- App state ----------
@@ -85,18 +85,28 @@ function inQueue(trackId) {
   return state.queue.some((s) => s.trackId === trackId);
 }
 
-const isHost = () => Boolean(me.pin);
+const isHost = () => Boolean(me.adminPw);
 
 // ---------- Network ----------
 
 async function api(path, body) {
   const res = await fetch(path, {
     method: body ? "POST" : "GET",
-    headers: { "Content-Type": "application/json", ...(me.pin ? { "X-Host-Pin": me.pin } : {}) },
-    body: body ? JSON.stringify({ clientKey, ...body }) : undefined,
+    headers: {
+      "Content-Type": "application/json",
+      ...(me.token ? { Authorization: `Bearer ${me.token}` } : {}),
+      ...(me.adminPw ? { "X-Admin-Password": me.adminPw } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
   let data = {};
   try { data = await res.json(); } catch {}
+  if (res.status === 401) signOut();
+  if (res.status === 403 && /password/i.test(data.error || "") && me.adminPw) {
+    me.adminPw = "";
+    store.set("adminPw", "");
+    render();
+  }
   if (!res.ok) throw new Error(data.error || "Something went wrong");
   return data;
 }
@@ -563,14 +573,10 @@ async function addTrack(t) {
     toast(existing && existing.likers.includes(me.id) ? "Already in the queue" : "Already in the queue. Tap ♥ to vote for it");
     return;
   }
-  if (!me.name) {
-    askName(() => addTrack(t));
-    return;
-  }
   if (pendingAdds.has(t.trackId)) return;
   pendingAdds.add(t.trackId);
   try {
-    const res = await api("/api/add", { trackId: t.trackId, name: me.name });
+    const res = await api("/api/add", { trackId: t.trackId });
     if (search.q) rememberSearch(search.q);
     toast(res.duplicate ? "Already in the queue, so we liked it for you" : "Added to queue");
     if (navigator.vibrate) navigator.vibrate(15);
@@ -603,11 +609,6 @@ async function hostAction(action, extra = {}, okMsg) {
     if (okMsg) toast(okMsg);
     afterMutation();
   } catch (err) {
-    if (/PIN/.test(err.message)) {
-      me.pin = "";
-      store.set("hostPin", "");
-      render();
-    }
     toast(err.message, true);
   }
 }
@@ -711,51 +712,89 @@ function openSongSheet(item) {
   openSheet(html);
 }
 
-function askName(then) {
-  openSheet(`
-    <h3>What's your name?</h3>
-    <p class="sub">So everyone can see who added which song.</p>
-    <form id="name-form">
-      <input class="field" id="name-input" maxlength="24" placeholder="Your name" autocomplete="given-name" enterkeyhint="done" value="${esc(me.name)}">
-      <button class="btn-green" type="submit">Continue</button>
-    </form>`);
-  const input = $("#name-input");
-  setTimeout(() => input.focus(), 60);
-  $("#name-form").addEventListener("submit", (e) => {
+// ---------- Sign up / log in ----------
+
+function showAuth(mode = "signup") {
+  const el = $("#auth");
+  el.hidden = false;
+  const s = state.settings || {};
+  const signup = mode === "signup";
+  el.innerHTML = `
+    <div class="auth-inner">
+      <img src="/icon.svg" alt="" class="auth-logo">
+      <h1>${signup ? "Sign up to add<br>your songs" : "Log in to<br>Class Queue"}</h1>
+      ${signup && s.signupsOpen === false ? `<div class="banner">Sign-ups are closed right now. Ask the host.</div>` : ""}
+      <form id="auth-form" novalidate>
+        ${signup ? `
+          <label class="auth-label" for="auth-name">Your name</label>
+          <input class="field" id="auth-name" maxlength="24" autocomplete="given-name" placeholder="What your classmates see">` : ""}
+        <label class="auth-label" for="auth-user">Username</label>
+        <input class="field" id="auth-user" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="e.g. leon_m">
+        <label class="auth-label" for="auth-pass">Password</label>
+        <input class="field" id="auth-pass" type="password" autocomplete="${signup ? "new-password" : "current-password"}" placeholder="${signup ? "At least 6 characters" : ""}">
+        ${signup && s.codeRequired ? `
+          <label class="auth-label" for="auth-code">Class code</label>
+          <input class="field" id="auth-code" autocapitalize="none" autocomplete="off" placeholder="Ask the host for it">` : ""}
+        <p class="auth-error" id="auth-error" role="alert"></p>
+        <button class="btn-green" type="submit">${signup ? "Sign up" : "Log in"}</button>
+      </form>
+      <div class="auth-switch">
+        ${signup ? `Already have an account? <button data-auth="login">Log in</button>` : `Don't have an account? <button data-auth="signup">Sign up</button>`}
+      </div>
+      ${signup ? "" : `<p class="auth-fine">Forgot your password? Ask the host to reset it.</p>`}
+    </div>`;
+  setTimeout(() => $(signup ? "#auth-name" : "#auth-user")?.focus(), 60);
+  $("#auth-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const name = input.value.replace(/\s+/g, " ").trim();
-    if (!name) {
-      input.focus();
-      return;
+    const btn = $("#auth-form button[type=submit]");
+    const err = $("#auth-error");
+    err.textContent = "";
+    btn.disabled = true;
+    const body = { username: $("#auth-user").value, password: $("#auth-pass").value };
+    if (signup) {
+      body.name = $("#auth-name").value;
+      body.code = $("#auth-code")?.value || "";
     }
-    me.name = name;
-    store.set("name", name);
-    closeSheet();
-    render();
-    then?.();
+    try {
+      const res = await api(signup ? "/api/signup" : "/api/login", body);
+      setUser(res.user, res.token);
+      el.hidden = true;
+      el.innerHTML = "";
+      render();
+      toast(signup ? `Welcome, ${res.user.name}!` : `Welcome back, ${res.user.name}`);
+    } catch (e2) {
+      err.textContent = e2.message;
+      btn.disabled = false;
+    }
   });
 }
+
+$("#auth").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-auth]");
+  if (b) showAuth(b.dataset.auth);
+});
 
 function openProfile() {
   const s = state.settings;
   let html = `
-    <h3>You</h3>
-    <form id="profile-form" style="display:flex;gap:8px;margin-bottom:6px">
-      <input class="field" id="profile-name" maxlength="24" placeholder="Your name" value="${esc(me.name)}">
-      <button class="btn-white" style="width:auto;margin:0;padding:0 20px" type="submit">Save</button>
-    </form>
-    <p class="sub" style="margin-top:8px">${state.queue.filter((q) => q.owner === me.id).length} of your songs are waiting in the queue.</p>`;
+    <div class="sheet-song" style="border:0">
+      <div class="avatar big" style="--avatar:${colorFor(me.name)}">${esc(me.name.slice(0, 1))}</div>
+      <div><div class="t">${esc(me.name)}</div><div class="a">@${esc(me.username)}</div></div>
+    </div>
+    <p class="sub">${state.queue.filter((q) => q.owner === me.id).length} of your songs are waiting in the queue.</p>`;
 
   if (!isHost()) {
     html += `
+      ${action("logout", "Log out", I.out)}
       <div class="group-title">Host</div>
-      <p class="sub">Running the music? Enter the host PIN to control the queue.</p>
+      <p class="sub">Running the music? Enter the dashboard password to control the queue from your phone.</p>
       <form id="pin-form">
-        <input class="field" id="pin-input" type="password" inputmode="numeric" autocomplete="off" placeholder="Host PIN">
+        <input class="field" id="pin-input" type="password" autocomplete="off" placeholder="Dashboard password">
         <button class="btn-outline" type="submit">${I.lock} Unlock host controls</button>
       </form>`;
   } else {
     html += `
+      <a class="action green" href="/admin">${I.out}<span>Open the dashboard</span></a>
       <div class="group-title">Host settings</div>
       <label class="setting"><div><div class="l">Pause requests</div><div class="s">Nobody else can add songs</div></div>
         <span class="switch"><input type="checkbox" data-setting="locked" ${s.locked ? "checked" : ""}><span></span></span></label>
@@ -769,36 +808,25 @@ function openProfile() {
       ${action("copy", "Copy song list", I.copy)}
       ${action("clear-history", "Clear recently played", I.trash)}
       ${action("clear-queue", "Clear the whole queue", I.trash, "danger")}
-      ${action("host-logout", "Leave host mode", I.user)}`;
+      ${action("host-logout", "Leave host mode", I.user)}
+      ${action("logout", "Log out", I.out)}`;
   }
   openSheet(html);
 
-  $("#profile-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const name = $("#profile-name").value.replace(/\s+/g, " ").trim();
-    if (!name) return;
-    me.name = name;
-    store.set("name", name);
-    render();
-    toast("Name saved");
-    closeSheet();
-  });
-
   $("#pin-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const pin = $("#pin-input").value.trim();
-    if (!pin) return;
+    const pw = $("#pin-input").value;
+    if (!pw) return;
     try {
-      await fetch("/api/host/login", {
+      const r = await fetch("/api/admin/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Host-Pin": pin },
-        body: JSON.stringify({ clientKey }),
-      }).then(async (r) => {
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(d.error || "Wrong PIN");
+        headers: { "Content-Type": "application/json", "X-Admin-Password": pw },
+        body: "{}",
       });
-      me.pin = pin;
-      store.set("hostPin", pin);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "Wrong password");
+      me.adminPw = pw;
+      store.set("adminPw", pw);
       render();
       toast("You're the host now");
       openProfile();
@@ -860,9 +888,16 @@ document.addEventListener("click", (e) => {
     case "clear-queue":
       if (confirm("Remove every song from the queue?")) { hostAction("clearQueue", {}, "Queue cleared"); closeSheet(); }
       break;
+    case "logout":
+      closeSheet();
+      api("/api/logout", {}).catch(() => {});
+      me.adminPw = "";
+      store.set("adminPw", "");
+      signOut();
+      break;
     case "host-logout":
-      me.pin = "";
-      store.set("hostPin", "");
+      me.adminPw = "";
+      store.set("adminPw", "");
       closeSheet();
       render();
       toast("Left host mode");
@@ -907,13 +942,19 @@ async function loadTrending() {
 }
 
 (async function boot() {
-  await computeMyId();
   renderSearchHome();
   const start = location.hash.slice(1);
   go(["search", "queue"].includes(start) ? start : "home");
+  await refreshState();
+  let signedIn = false;
+  if (me.token) {
+    try {
+      setUser((await api("/api/me")).user);
+      signedIn = true;
+    } catch {}
+  }
+  if (!signedIn) showAuth(store.get("hadAccount", false) ? "login" : "signup");
   render();
-  refreshState();
   connect();
   loadTrending();
-  if (!me.name) setTimeout(() => askName(), 400);
 })();

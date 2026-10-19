@@ -25,5 +25,5 @@
     "ITUNES_BASE": "https://itunes.apple.com",
     "CHARTS_BASE": "https://rss.marketingtools.apple.com"
   }
-  // The host PIN is a secret, not a var:  npx wrangler secret put HOST_PIN
+  // The dashboard password is a secret, not a var:  npx wrangler secret put ADMIN_PASSWORD
 }

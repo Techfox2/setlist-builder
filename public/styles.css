@@ -337,3 +337,27 @@ svg { width: 24px; height: 24px; fill: currentColor; flex: none; }
   .row-btn:hover, .icon-btn:hover { color: var(--text); }
   .tile:hover img { filter: brightness(1.1); }
 }
+
+/* ---------- Sign up / log in ---------- */
+
+.auth {
+  position: fixed; inset: 0; z-index: 60; overflow-y: auto;
+  background: linear-gradient(180deg, #1f1f1f 0%, #121212 45%);
+}
+.auth-inner {
+  max-width: 400px; margin: 0 auto;
+  padding: calc(48px + env(safe-area-inset-top, 0px)) 24px calc(32px + var(--safe-b));
+  text-align: center;
+}
+.auth-logo { width: 56px; height: 56px; margin: 0 auto 22px; border-radius: 14px; }
+.auth h1 { font-size: 30px; font-weight: 800; letter-spacing: -.03em; line-height: 1.15; margin: 0 0 28px; }
+.auth form { text-align: left; }
+.auth-label { display: block; font-size: 14px; font-weight: 700; margin: 16px 0 8px; }
+.auth .btn-green { width: 100%; margin-top: 22px; }
+.auth .btn-green[disabled] { opacity: .6; }
+.auth-error { color: var(--red); font-size: 14px; font-weight: 600; min-height: 18px; margin: 12px 0 0; }
+.auth-switch { color: var(--sub); font-size: 15px; margin-top: 28px; }
+.auth-switch button { color: var(--text); font-weight: 700; text-decoration: underline; }
+.auth-fine { color: var(--dim); font-size: 13px; margin-top: 14px; }
+.auth .banner { text-align: left; }
+.avatar.big { width: 56px; height: 56px; font-size: 24px; flex: none; }

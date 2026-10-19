@@ -11,27 +11,34 @@ A Spotify-style web app for phones. Classmates open the link, search any song an
 - A "Trending right now" shelf from Apple's charts for your country
 - Live queue that updates on every phone instantly, plus a "N here" counter
 - Likes (♥) to vote for songs. If someone adds a song that's already queued, it counts as a like instead of a duplicate
+- Everyone has to sign up (name, username, password) before they can add or like songs. An optional class code keeps outsiders out
 - People can remove their own songs. Filters: All / Added by you / Liked
 - Each song has links to open it in Spotify or Apple Music
-- **Host mode** (unlocked with a PIN, from the avatar in the top left):
+- **Dashboard** at `/admin`, behind your dashboard password:
+  - Live stats: online now, members, active today, queue size, songs added today, played, likes
+  - Full queue control and recently played
+  - Members list: block or unblock, reset a forgotten password (you get a temporary one to tell them), delete accounts
+  - Settings: allow sign-ups, class code, pause requests, explicit filter, queue order, songs per person
+  - Activity log of who joined, added and removed what
+- **Host mode on your phone** (tap the avatar and enter the same dashboard password):
   - Next song, play now, move to top, move up or down, mark played, add back from history, remove anything
   - Pause requests, block explicit songs (on by default), order by first come or most liked, songs-per-person limit (default 5)
   - Copy the whole list as text, clear the queue or history
-- Guards: a basic spam rate limit, names required, and song data always fetched on the server so nobody can inject fake songs
+- Guards: a basic spam rate limit, limits on wrong password guesses, salted password hashes, and song data always fetched on the server so nobody can inject fake songs
 
 ## Run locally
 
 ```bash
 npm install
-echo "HOST_PIN=1234" > .dev.vars
-npm run dev            # http://localhost:8787
+echo "ADMIN_PASSWORD=letmein" > .dev.vars
+npm run dev            # app: http://localhost:8787  dashboard: /admin
 ```
 
 ## Deploy to Cloudflare
 
 ```bash
 npx wrangler login
-npx wrangler secret put HOST_PIN     # pick your host PIN
+npx wrangler secret put ADMIN_PASSWORD   # pick your dashboard password
 npm run deploy
 ```
 
